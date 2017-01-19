@@ -3,3 +3,4 @@
 !.npmignore
 _*
 node_modules
+test/data

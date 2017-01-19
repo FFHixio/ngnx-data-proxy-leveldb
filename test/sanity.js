@@ -94,91 +94,55 @@ test('Self Inspection', function (t) {
   t.end()
 })
 
-// test('Data Formatting', function (t) {
-//   let m = meta()
-//   m.proxy = new NGNX.DATA.LevelDBProxy(root)
-//
-//   let TestRecord = new NGN.DATA.Model(m)
-//   let rec = new TestRecord({
-//     firstname: 'The',
-//     lastname: 'Doctor'
-//   })
-//
-//   let output = rec.format(rec.data)
-//
-//   t.ok(
-//     output[0].key === 'firstname' && output[0].value === 'The' &&
-//     output[1].key === 'lastname' && output[1].value === 'Doctor' &&
-//     output[2].key === 'val' && output[2].value === 15,
-//     'Formatted for bulk input'
-//   )
-//
-//   t.end()
-// })
+test('Basic Save & Fetch (Data Model)', function (t) {
+  let Pet = new NGN.DATA.Model({
+    fields: {
+      name: null,
+      breed: null
+    }
+  })
 
-// test('Nested Record Namespacing', function (t) {
-//   let m = meta()
-//   m.proxy = new NGNX.DATA.LevelDBProxy(root)
-//
-//   let Pet = new NGN.DATA.Model({
-//     fields: {
-//       name: null,
-//       breed: null
-//     }
-//   })
-//
-//   m.relationships = {
-//     pet: Pet
-//   }
-//
-//   let TestRecord = new NGN.DATA.Model(m)
-//   let rec = new TestRecord({
-//     firstname: 'The',
-//     lastname: 'Doctor',
-//     pet: {
-//       name: 'K-9',
-//       breed: 'Robodog'
-//     }
-//   })
-//
-//   let output = rec.format(rec.data)
-//
-//   t.ok(
-//     output[0].key === 'firstname' && output[0].value === 'The' &&
-//     output[1].key === 'lastname' && output[1].value === 'Doctor' &&
-//     output[2].key === 'val' && output[2].value === 15 &&
-//     output[3].key === 'pet.name' && output[3].value === 'K-9' &&
-//     output[4].key === 'pet.breed' && output[4].value === 'Robodog',
-//     'Namespacing exists for flattened submodels'
-//   )
-//
-//   t.end()
-// })
-//
-// test('Store Formatting (Multirecord)', function (t) {
-//   let dataset = createPetSet()
-//   let output = dataset.format(dataset.data)
-//
-//   t.ok(
-//     output[0].key === '0.firstname' && output[0].value === 'The' &&
-//     output[1].key === '0.lastname' && output[1].value === 'Doctor' &&
-//     output[2].key === '0.val' && output[2].value === 15 &&
-//     output[3].key === '0.pet.name' && output[3].value === 'K-9' &&
-//     output[4].key === '0.pet.breed' && output[4].value === 'Robodog' &&
-//     output[5].key === '1.firstname' && output[5].value === 'The' &&
-//     output[6].key === '1.lastname' && output[6].value === 'Master' &&
-//     output[7].key === '1.val' && output[7].value === 15 &&
-//     output[8].key === '1.pet.name' && output[8].value === 'Drums' &&
-//     output[9].key === '1.pet.breed' && output[9].value === '?',
-//     'Namespacing exists for flattened submodels across multiple records.'
-//   )
-//
-//   t.ok(dataset.proxy.type === 'store', 'Recognized store.')
-//
-//   t.end()
-// })
+  let m = meta()
 
-test('Basic Save & Fetch', function (t) {
+  m.relationships = {
+    pet: Pet
+  }
+
+  m.proxy = new NGNX.DATA.LevelDBProxy(root)
+
+  let DataRecord = new NGN.DATA.Model(m)
+  let record = new DataRecord({
+    firstname: 'The',
+    lastname: 'Doctor',
+    pet: {
+      name: 'K-9',
+      breed: 'Robodog'
+    }
+  })
+
+  record.once('field.update', function (change) {
+    record.save(() => {
+      t.pass('Save method applies callback.')
+
+      record.lastname = 'Master'
+
+      t.ok(record.lastname === 'Master', 'Changes apply normally.')
+
+      record.fetch(() => {
+        t.pass('Fetch method applies callback.')
+        t.ok(record.lastname === 'Doctor', 'Data accurately loaded from disk.')
+        t.ok(record.pet.name === 'K-9', 'Properly retrieved nested model data.')
+
+        fse.emptyDirSync(root)
+        t.end()
+      })
+    })
+  })
+
+  record.firstname = 'Da'
+})
+
+test('Basic Save & Fetch (Data Store)', function (t) {
   let ds = createPetSet()
 
   ds.once('record.update', function (record, change) {
@@ -193,6 +157,7 @@ test('Basic Save & Fetch', function (t) {
           ds.first.pet.name === 'K-9',
         'Successfully retrieved modified results.')
 
+        fse.emptyDirSync(root)
         t.end()
       })
     })
@@ -200,8 +165,3 @@ test('Basic Save & Fetch', function (t) {
 
   ds.last.firstname = 'Da'
 })
-
-// TODO: save (sync)
-// TODO: fetch (get all).
-// TODO: query (get some).
-// TODO: update/upsert
