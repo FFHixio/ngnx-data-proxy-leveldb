@@ -112,7 +112,7 @@ class LevelDbProxy extends NGN.DATA.Proxy {
             key: attribute.toString().trim(),
             value: data[attribute],
             keyEncoding: 'string',
-            valueEncoding: typeof data[attribute] === 'object' ? 'json' : typeof data[attribute]
+            valueEncoding: Array.isArray(data[attribute]) ? 'json' : (typeof data[attribute] === 'object' ? 'json' : typeof data[attribute])
           })
         })
       }
@@ -195,7 +195,7 @@ class LevelDbProxy extends NGN.DATA.Proxy {
 
             return {
               key: key,
-              type: type
+              type: type === 'array' ? 'json' : type
             }
           })
 

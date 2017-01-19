@@ -165,3 +165,32 @@ test('Basic Save & Fetch (Data Store)', function (t) {
 
   ds.last.firstname = 'Da'
 })
+
+test('Store Array Values', function (t) {
+  let Model = new NGN.DATA.Model({
+    fields: {
+      a: Array
+    },
+    proxy: new NGNX.DATA.LevelDBProxy(root)
+  })
+
+  let record = new Model({
+    a: ['a', 'b', 'c', {d: true}]
+  })
+
+  record.save(() => {
+    t.pass('Saved array data.')
+    record.a = []
+
+    record.fetch(() => {
+      t.pass('Retrieved array data.')
+
+      t.ok(Array.isArray(record.a), 'Record returned in array format.')
+      t.ok(typeof record.a.pop() === 'object' && record.a[0] === 'a', 'Array data is in correct format.')
+
+      fse.emptyDirSync(root)
+
+      t.end()
+    })
+  })
+})
