@@ -136,7 +136,7 @@ class LevelDbProxy extends NGN.DATA.Proxy {
           done()
           setTimeout(() => {
             this.emit('save')
-            callback()
+            callback && callback()
           }, 10)
         })
       })
