@@ -194,3 +194,30 @@ test('Store Array Values', function (t) {
     })
   })
 })
+
+test('Non-String Primitive Data Types', function (t) {
+  let Model = new NGN.DATA.Model({
+    fields: {
+      b: Boolean,
+      n: Number,
+      nil: null
+    },
+    proxy: new NGNX.DATA.LevelDBProxy(root)
+  })
+
+  let record = new Model({
+    b: false,
+    n: 3
+  })
+
+  record.save(() => {
+    record.b = true
+
+    record.fetch(() => {
+      t.ok(record.b === false, 'Boolean supported.')
+      t.ok(record.n === 3, 'Number supported.')
+      t.ok(record.nil === null, 'Null supported.')
+      t.end()
+    })
+  })
+})

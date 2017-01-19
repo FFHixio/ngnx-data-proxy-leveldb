@@ -110,7 +110,7 @@ class LevelDbProxy extends NGN.DATA.Proxy {
           results.push({
             type: 'put',
             key: attribute.toString().trim(),
-            value: data[attribute],
+            value: data[attribute] === null ? '#NIL' : data[attribute],
             keyEncoding: 'string',
             valueEncoding: Array.isArray(data[attribute]) ? 'json' : (typeof data[attribute] === 'object' ? 'json' : typeof data[attribute])
           })
@@ -176,7 +176,6 @@ class LevelDbProxy extends NGN.DATA.Proxy {
         })
       })
     } else {
-      let pattern = /function\s(.*)\(\).*/gi
       this.op((db, done) => {
         let keys = []
         db.createKeyStream().on('data', (key) => {
@@ -187,15 +186,9 @@ class LevelDbProxy extends NGN.DATA.Proxy {
         })
         .on('end', () => {
           keys = keys.map((key) => {
-            let type = 'json'
-            if (!this.joins.hasOwnProperty(key)) {
-              type = pattern.exec(this.fields[key].type.toString())
-              type = NGN.coalesce(type, [null, 'string'])[1].toLowerCase()
-            }
-
             return {
               key: key,
-              type: type === 'array' ? 'json' : type
+              type: this.getFieldType(key)
             }
           })
 
@@ -212,6 +205,23 @@ class LevelDbProxy extends NGN.DATA.Proxy {
                 }, (err, value) => {
                   if (err) {
                     throw err
+                  }
+
+                  if (['string', 'number', 'boolean'].indexOf(item.type) >= 0) {
+                    let type = this.getFieldType(item.key)
+                    if (value.indexOf('#NIL') >= 0) {
+                      value = null
+                    } else if (type === 'boolean') {
+                      value = value === 'true'
+                    } else if (type === 'number') {
+                      if (value.indexOf('.') < 0) {
+                        value = parseInt(value, 10)
+                      } else {
+                        value = parseFloat(value)
+                      }
+                    }
+
+                    type = null
                   }
 
                   data[item.key] = value
@@ -237,6 +247,18 @@ class LevelDbProxy extends NGN.DATA.Proxy {
         })
       })
     }
+  }
+
+  getFieldType (field) {
+    let pattern = /function\s(.*)\(\).*/gi
+    let type = 'json'
+
+    if (!this.joins.hasOwnProperty(field)) {
+      type = pattern.exec(this.fields[field].type.toString())
+      type = NGN.coalesce(type, [null, 'string'])[1].toLowerCase()
+    }
+
+    return type === 'array' ? 'json' : type
   }
 
   parse (dataset) {
