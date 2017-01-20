@@ -91,19 +91,23 @@ class LevelDbProxy extends NGN.DATA.Proxy {
     })
   }
 
-  format (data, namespace = '', separator = '.') {
+  flatten (key, value) {
+    return {
+      type: 'put',
+      key: key.toString(),
+      value: value,
+      keyEncoding: 'string',
+      valueEncoding: 'json'
+    }
+  }
+
+  format (data) {
     let results = []
 
     if (data) {
       if (Array.isArray(data)) {
         data.forEach((item, index) => {
-          results.push({
-            type: 'put',
-            key: NGN.coalesce(item[this.idAttribute], index).toString(),
-            value: item,
-            keyEncoding: 'string',
-            valueEncoding: 'json'
-          })
+          results.push(this.flatten(NGN.coalesce(item[this.idAttribute], index), item))
         })
       } else {
         Object.keys(data).forEach((attribute) => {
@@ -167,6 +171,7 @@ class LevelDbProxy extends NGN.DATA.Proxy {
           dataset.push(data)
         })
         .on('error', (err) => {
+          done()
           throw err
         })
         .on('end', () => {
@@ -176,15 +181,20 @@ class LevelDbProxy extends NGN.DATA.Proxy {
         })
       })
     } else {
-      this.op((db, done) => {
+      this.op((db, fetchcomplete) => {
         let keys = []
         db.createKeyStream().on('data', (key) => {
-          keys.push(key)
+          if (this.hasOwnProperty(key)) {
+            keys.push(key)
+          }
         })
         .on('error', (err) => {
+          fetchcomplete()
           throw err
         })
         .on('end', () => {
+          fetchcomplete()
+
           keys = keys.map((key) => {
             return {
               key: key,
@@ -204,6 +214,7 @@ class LevelDbProxy extends NGN.DATA.Proxy {
                   valueEncoding: item.type
                 }, (err, value) => {
                   if (err) {
+                    finished()
                     throw err
                   }
 
@@ -238,13 +249,13 @@ class LevelDbProxy extends NGN.DATA.Proxy {
           })
 
           tasks.on('complete', () => {
-            done()
+            keys = null
 
             if (Object.keys(data).length > 0) {
               this.load(data)
             }
 
-            setTimeout(callback, 10)
+            setTimeout(callback, 20)
           })
 
           setTimeout(() => {
@@ -261,8 +272,15 @@ class LevelDbProxy extends NGN.DATA.Proxy {
     let type = 'json'
 
     if (!this.joins.hasOwnProperty(field)) {
+      if (!this.fields.hasOwnProperty(field)) {
+        console.warn(field + ' is not a field in the model.')
+        return null
+      }
+
       type = pattern.exec(this.fields[field].type.toString())
       type = NGN.coalesce(type, [null, 'string'])[1].toLowerCase()
+    } else {
+      return 'json'
     }
 
     return type === 'array' ? 'json' : type
@@ -300,14 +318,173 @@ class LevelDbProxy extends NGN.DATA.Proxy {
             key[newkey] = key[newkey] || (keys.length === 0 ? item.value : {})
           }
         }
-
-        // console.log(model)
       })
 
       if (Object.keys(currentData).length > 0) {
         resultset.push(currentData)
         currentData = null
       }
+    }
+  }
+
+  /**
+   * @method enableLiveSync
+   * Live synchronization monitors the dataset for changes and immediately
+   * commits them to the data storage system.
+   * @fires live.create
+   * Triggered when a new record is persisted to the data store.
+   * @fires live.update
+   * Triggered when a record modification is persisted to the data store.
+   * @fires live.delete
+   * Triggered when a record is removed from the data store.
+   */
+  enableLiveSync () {
+    if (this.type === 'model') {
+      this.on('field.create', (change) => {
+        this.op((db, done) => {
+          db.put(change.field, NGN.coalesce(this[change.field], this.fields[change.field].default, null), {
+            keyEncoding: 'string',
+            valueEncoding: this.getFieldType(change.field)
+          }, (err) => {
+            if (err) {
+              done()
+              throw err
+            }
+
+            done()
+            setTimeout(() => {
+              this.emit('live.create', change)
+            }, 10)
+          })
+        })
+      })
+
+      this.on('field.update', (change) => {
+        this.op((db, done) => {
+          let key = change.field
+          let val = change.new
+          let type = null
+
+          if (change.join) {
+            key = change.field.split('.')[0]
+            val = this[key].data
+            type = 'json'
+          } else {
+            type = this.getFieldType(change.field)
+          }
+
+          db.put(key, val, {
+            keyEncoding: 'string',
+            valueEncoding: type
+          }, (err) => {
+            if (err) {
+              done()
+              throw err
+            }
+
+            key = null
+            val = null
+            type = null
+
+            done()
+            setTimeout(() => {
+              this.emit('live.update', change)
+            }, 10)
+          })
+        })
+      })
+
+      this.on('field.remove', (change) => {
+        this.op((db, done) => {
+          db.del(change.field, {
+            keyEncoding: 'string',
+            valueEncoding: this.getFieldType(change.field)
+          }, (err) => {
+            if (err) {
+              done()
+              throw err
+            }
+
+            done()
+            setTimeout(() => {
+              this.emit('live.delete', change)
+            }, 10)
+          })
+        })
+      })
+
+      // relationship.create is unncessary because no data is available
+      // when a relationship is created. All related data will trigger a
+      // `field.update` event.
+      this.on('relationship.remove', (change) => {
+        this.op((db, done) => {
+          db.del(change.field, (err) => {
+            if (err) {
+              throw err
+            }
+
+            done()
+            setTimeout(() => {
+              this.emit('live.delete', change)
+            }, 10)
+          })
+        })
+      })
+    } else {
+      // Persist new records
+      this.store.on('record.create', (record) => {
+        this.op((db, done) => {
+          if (record[record.idAttribute] === null) {
+            record.setSilent(record.idAttribute, NGN.DATA.util.GUID())
+          }
+
+          db.put(record[record.idAttribute].toString(), record.data, {
+            keyEncoding: 'string',
+            valueEncoding: 'json'
+          }, (err) => {
+            if (err) {
+              throw err
+            }
+
+            done()
+            this.emit('live.create', record)
+          })
+        })
+      })
+
+      // Update existing records
+      this.store.on('record.update', (record, change) => {
+        this.op((db, done) => {
+          db.put(record[record.idAttribute].toString(), record.data, {
+            keyEncoding: 'string',
+            valueEncoding: 'json'
+          }, (err) => {
+            if (err) {
+              throw err
+            }
+
+            done()
+            this.emit('live.update', record)
+          })
+        })
+      })
+
+      // Remove old records
+      this.store.on('record.delete', (record) => {
+        this.op((db, done) => {
+          db.del(record[record.idAttribute], {
+            keyEncoding: 'string',
+            valueEncoding: 'json'
+          })
+        }, (err) => {
+          if (err) {
+            throw err
+          }
+
+          done() // eslint-disable-line
+          this.emit('live.delete', record)
+        })
+      })
     }
   }
 }

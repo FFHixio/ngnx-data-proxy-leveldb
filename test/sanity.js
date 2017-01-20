@@ -226,3 +226,121 @@ test('Non-String Primitive Data Types', function (t) {
     })
   })
 })
+
+test('Live Sync Model', function (t) {
+  setTimeout(() => {
+    let Pet = new NGN.DATA.Model({
+      fields: {
+        name: null,
+        breed: null
+      }
+    })
+
+    let m = meta()
+
+    m.relationships = {
+      pet: Pet
+    }
+
+    m.proxy = new NGNX.DATA.LevelDBProxy(root)
+
+    let TempDataRecord = new NGN.DATA.Model(m)
+    let record = new TempDataRecord({
+      firstname: 'The',
+      lastname: 'Doctor',
+      pet: {
+        name: 'K-9',
+        breed: 'Robodog'
+      }
+    })
+
+    record.save(() => {
+      record.enableLiveSync()
+
+      let TaskRunner = require('shortbus')
+      let tasks = new TaskRunner()
+
+      tasks.add((next) => {
+        record.once('live.update', () => {
+          t.pass('live.update method detected.')
+          record.setSilent('firstname', 'Bubba')
+
+          record.fetch(() => {
+            t.ok(record.firstname === 'Da', 'Persisted correct value.')
+            next()
+          })
+        })
+
+        record.firstname = 'Da'
+      })
+
+      tasks.add((next) => {
+        record.once('live.create', () => {
+          t.pass('live.create triggered on new field creation.')
+          record.fetch(() => {
+            t.ok(record.hasOwnProperty('middlename') && record.middlename === 'Alonsi', 'Field creation persisted on the fly.')
+            next()
+          })
+        })
+
+        record.addField('middlename', {
+          type: String,
+          default: 'Alonsi',
+          required: true
+        })
+      })
+
+      tasks.add((next) => {
+        record.once('live.delete', () => {
+          t.pass('live.delete triggered on new field creation.')
+          t.ok(!record.hasOwnProperty('middlename'), 'Field deletion persisted on the fly.')
+
+          record.op((db, done) => {
+            db.get('middlename', (err, value) => {
+              done()
+
+              t.ok(err instanceof Error, 'Error received on missing record.')
+
+              setTimeout(next, 10)
+            })
+          })
+        })
+
+        record.removeField('middlename')
+      })
+
+      tasks.add((next) => {
+        record.once('live.update', () => {
+          t.pass('live.update triggered when new relationship is available.')
+
+          record.vehicle.setSilent('type', 'other')
+
+          record.fetch(() => {
+            t.ok(record.vehicle.type === 'Tardis', 'Proper value persisted in nested model.')
+            next()
+          })
+        })
+
+        let Vehicle = new NGN.DATA.Model({
+          fields: {
+            type: null,
+            doors: Number
+          }
+        })
+
+        record.on('relationship.create', () => {
+          record.vehicle.type = 'Tardis'
+        })
+
+        record.addRelationshipField('vehicle', Vehicle)
+      })
+
+      tasks.on('complete', () => {
+        fse.emptyDirSync(root)
+        t.end()
+      })
+
+      tasks.run(true)
+    })
+  }, 600)
+})
