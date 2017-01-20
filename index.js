@@ -207,8 +207,9 @@ class LevelDbProxy extends NGN.DATA.Proxy {
                     throw err
                   }
 
-                  if (['string', 'number', 'boolean'].indexOf(item.type) >= 0) {
+                  if (['string', 'number', 'boolean', 'object'].indexOf(item.type) >= 0) {
                     let type = this.getFieldType(item.key)
+
                     if (value.indexOf('#NIL') >= 0) {
                       value = null
                     } else if (type === 'boolean') {
@@ -219,6 +220,8 @@ class LevelDbProxy extends NGN.DATA.Proxy {
                       } else {
                         value = parseFloat(value)
                       }
+                    } else if (type === 'object') {
+                      value = JSON.parse(value)
                     }
 
                     type = null

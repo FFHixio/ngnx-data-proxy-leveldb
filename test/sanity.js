@@ -200,14 +200,18 @@ test('Non-String Primitive Data Types', function (t) {
     fields: {
       b: Boolean,
       n: Number,
-      nil: null
+      nil: null,
+      o: Object
     },
     proxy: new NGNX.DATA.LevelDBProxy(root)
   })
 
   let record = new Model({
     b: false,
-    n: 3
+    n: 3,
+    o: {
+      some: 'value'
+    }
   })
 
   record.save(() => {
@@ -217,6 +221,7 @@ test('Non-String Primitive Data Types', function (t) {
       t.ok(record.b === false, 'Boolean supported.')
       t.ok(record.n === 3, 'Number supported.')
       t.ok(record.nil === null, 'Null supported.')
+      t.ok(record.o.some === 'value', 'Object/JSON supported for models.')
       t.end()
     })
   })
