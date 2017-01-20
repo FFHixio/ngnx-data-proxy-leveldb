@@ -239,7 +239,11 @@ class LevelDbProxy extends NGN.DATA.Proxy {
 
           tasks.on('complete', () => {
             done()
-            this.load(data)
+
+            if (Object.keys(data).length > 0) {
+              this.load(data)
+            }
+
             setTimeout(callback, 10)
           })
 
