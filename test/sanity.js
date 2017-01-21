@@ -2,6 +2,7 @@
 
 let test = require('tape')
 let fse = require('fs-extra')
+let TaskRunner = require('shortbus')
 
 require('ngn')
 require('ngn-data')
@@ -257,7 +258,6 @@ test('Live Sync Model', function (t) {
     record.save(() => {
       record.enableLiveSync()
 
-      let TaskRunner = require('shortbus')
       let tasks = new TaskRunner()
 
       tasks.add((next) => {
@@ -343,4 +343,150 @@ test('Live Sync Model', function (t) {
       tasks.run(true)
     })
   }, 600)
+})
+
+test('Live Sync Store', function (t) {
+  let Person = new NGN.DATA.Model({
+    fields: {
+      firstname: null,
+      lastname: null
+    }
+  })
+
+  let People = new NGN.DATA.Store({
+    model: Person,
+    proxy: new NGNX.DATA.LevelDBProxy(root)
+  })
+
+  People.enableLiveSync()
+
+  let tasks = new TaskRunner()
+
+  tasks.add((next) => {
+    People.once('live.create', (record) => {
+      People.op((db, done) => {
+        db.get(record.id, {
+          valueEncoding: 'json'
+        }, (err, v) => {
+          if (err) {
+            t.fail(err.message)
+          }
+
+          done()
+
+          t.ok(v.firstname === 'The' && v.lastname === 'Doctor', 'Correct values stored.')
+
+          setTimeout(() => {
+            next()
+          }, 10)
+        })
+      })
+    })
+
+    People.add({
+      firstname: 'The',
+      lastname: 'Doctor'
+    })
+  })
+
+  tasks.add((next) => {
+    People.once('live.create', (record) => {
+      People.op((db, done) => {
+        db.get(record.id, {
+          valueEncoding: 'json'
+        }, (err, v) => {
+          if (err) {
+            t.fail(err.message)
+          }
+
+          done()
+
+          t.ok(v.firstname === 'The' && v.lastname === 'Master', 'Correct values stored for multiple records.')
+
+          setTimeout(() => {
+            next()
+          }, 10)
+        })
+      })
+    })
+
+    People.add({
+      firstname: 'The',
+      lastname: 'Master'
+    })
+  })
+
+  tasks.add((next) => {
+    People.once('live.update', (record) => {
+      People.op((db, done) => {
+        db.get(record.id, {
+          valueEncoding: 'json'
+        }, (err, v) => {
+          if (err) {
+            t.fail(err.message)
+          }
+
+          done()
+
+          t.ok(v.firstname === 'Da' && v.lastname === 'Master', 'Correct record and value written during update.')
+
+          setTimeout(() => {
+            next()
+          }, 10)
+        })
+      })
+    })
+
+    People.last.firstname = 'Da'
+  })
+
+  tasks.add((next) => {
+    People.once('live.delete', (record) => {
+      People.op((db, done) => {
+        db.get(record.id, (err) => {
+          done()
+
+          if (err) {
+            t.pass('Deleted record does not exist on disk.')
+            setTimeout(() => {
+              next()
+            }, 10)
+          } else {
+            t.fail('Record exists on disk when it shouldn\'t.')
+          }
+        })
+      })
+    })
+
+    People.remove(People.first)
+  })
+
+  tasks.add((next) => {
+    let id = People.first.id
+
+    People.on('live.delete', () => {
+      People.op((db, done) => {
+        db.get(id, (err) => {
+          done()
+
+          if (err) {
+            t.pass('Deleted records do not exist on disk.')
+            setTimeout(() => {
+              next()
+            }, 10)
+          } else {
+            t.fail('Records exist on disk after clear.')
+          }
+        })
+      })
+    })
+
+    People.clear()
+  })
+
+  tasks.on('complete', () => {
+    t.end()
+  })
+
+  tasks.run(true)
 })

@@ -432,7 +432,7 @@ class LevelDbProxy extends NGN.DATA.Proxy {
       })
     } else {
       // Persist new records
-      this.store.on('record.create', (record) => {
+      this.on('record.create', (record) => {
         this.op((db, done) => {
           if (record[record.idAttribute] === null) {
             record.setSilent(record.idAttribute, NGN.DATA.util.GUID())
@@ -447,13 +447,15 @@ class LevelDbProxy extends NGN.DATA.Proxy {
             }
 
             done()
-            this.emit('live.create', record)
+            setTimeout(() => {
+              this.emit('live.create', record)
+            }, 10)
           })
         })
       })
 
       // Update existing records
-      this.store.on('record.update', (record, change) => {
+      this.on('record.update', (record, change) => {
         this.op((db, done) => {
           db.put(record[record.idAttribute].toString(), record.data, {
             keyEncoding: 'string',
@@ -464,25 +466,35 @@ class LevelDbProxy extends NGN.DATA.Proxy {
             }
 
             done()
-            this.emit('live.update', record)
+            setTimeout(() => {
+              this.emit('live.update', record)
+            }, 10)
           })
         })
       })
 
       // Remove old records
-      this.store.on('record.delete', (record) => {
+      this.on('record.delete', (record) => {
         this.op((db, done) => {
           db.del(record[record.idAttribute], {
             keyEncoding: 'string',
             valueEncoding: 'json'
-          })
-        }, (err) => {
-          if (err) {
-            throw err
-          }
+          }, (err) => {
+            if (err) {
+              throw err
+            }
 
-          done() // eslint-disable-line
-          this.emit('live.delete', record)
+            done() // eslint-disable-line
+            setTimeout(() => {
+              this.emit('live.delete', record)
+            }, 10)
+          })
+        })
+      })
+
+      this.on('clear', () => {
+        require('leveldown').destroy(this.directory, () => {
+          this.emit('live.delete', null)
         })
       })
     }
