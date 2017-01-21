@@ -1,6 +1,6 @@
 {
   "name": "ngnx-data-proxy-leveldb",
-  "version": "1.0.7",
+  "version": "1.0.8",
   "description": "A LevelDB proxy for NGN Data management.",
   "main": "index.js",
   "scripts": {
@@ -37,7 +37,7 @@
     "gulp-header": "^1.8.7",
     "gulp-strip-comments": "^2.4.3",
     "ngn": "0.3.25",
-    "ngn-data": "0.0.37",
+    "ngn-data": "0.0.38",
     "snazzy": "^2.0.1",
     "standard": "^5.3.1",
     "standard-tap": "^1.0.1",
