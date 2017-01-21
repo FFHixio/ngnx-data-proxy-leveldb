@@ -52,19 +52,12 @@ class LevelDbProxy extends NGN.DATA.Proxy {
        */
       directory: NGN.const(config.directory),
 
-      /**
-       * @property {string} proxytype
-       * The type of underlying data (model or store).
-       * @private
-       */
-      type: NGN.private(null),
-
       leveldb: NGN.privateconst(require('levelup'))
     })
   }
 
   init (datastore) {
-    this.type = datastore instanceof NGN.DATA.Store ? 'store' : 'model'
+    super.init(datastore)
     NGN.inherit(this, datastore)
   }
 
