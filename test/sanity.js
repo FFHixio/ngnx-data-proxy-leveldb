@@ -122,14 +122,14 @@ test('Basic Save & Fetch (Data Model)', function (t) {
   })
 
   record.once('field.update', function (change) {
-    record.save(() => {
+    record.proxy.save(() => {
       t.pass('Save method applies callback.')
 
       record.lastname = 'Master'
 
       t.ok(record.lastname === 'Master', 'Changes apply normally.')
 
-      record.fetch(() => {
+      record.proxy.fetch(() => {
         t.pass('Fetch method applies callback.')
         t.ok(record.lastname === 'Doctor', 'Data accurately loaded from disk.')
         t.ok(record.pet.name === 'K-9', 'Properly retrieved nested model data.')
@@ -145,21 +145,24 @@ test('Basic Save & Fetch (Data Model)', function (t) {
 
 test('Basic Save & Fetch (Data Store)', function (t) {
   let ds = createPetSet()
-
+console.log(ds.data)
   ds.once('record.update', function (record, change) {
-    ds.save(() => {
+    ds.proxy.save(() => {
       t.pass('Save method applies callback.')
 
-      ds.fetch(() => {
+      ds.proxy.fetch(() => {
         t.pass('Fetch method applies callback.')
+console.log(ds.data)
         t.ok(ds.first.lastname === 'Doctor' &&
           ds.last.lastname === 'Master' &&
           ds.last.firstname === 'Da' &&
           ds.first.pet.name === 'K-9',
         'Successfully retrieved modified results.')
 
-        fse.emptyDirSync(root)
-        t.end()
+        setTimeout(() => {
+          fse.emptyDirSync(root)
+          t.end()
+        }, 100)
       })
     })
   })
@@ -179,11 +182,11 @@ test('Store Array Values', function (t) {
     a: ['a', 'b', 'c', {d: true}]
   })
 
-  record.save(() => {
+  record.proxy.save(() => {
     t.pass('Saved array data.')
     record.a = []
 
-    record.fetch(() => {
+    record.proxy.fetch(() => {
       t.pass('Retrieved array data.')
 
       t.ok(Array.isArray(record.a), 'Record returned in array format.')
@@ -215,10 +218,10 @@ test('Non-String Primitive Data Types', function (t) {
     }
   })
 
-  record.save(() => {
+  record.proxy.save(() => {
     record.b = true
 
-    record.fetch(() => {
+    record.proxy.fetch(() => {
       t.ok(record.b === false, 'Boolean supported.')
       t.ok(record.n === 3, 'Number supported.')
       t.ok(record.nil === null, 'Null supported.')
@@ -255,7 +258,7 @@ test('Live Sync Model', function (t) {
       }
     })
 
-    record.save(() => {
+    record.proxy.save(() => {
       record.enableLiveSync()
 
       let tasks = new TaskRunner()
@@ -265,7 +268,7 @@ test('Live Sync Model', function (t) {
           t.pass('live.update method detected.')
           record.setSilent('firstname', 'Bubba')
 
-          record.fetch(() => {
+          record.proxy.fetch(() => {
             t.ok(record.firstname === 'Da', 'Persisted correct value.')
             next()
           })
@@ -277,7 +280,7 @@ test('Live Sync Model', function (t) {
       tasks.add((next) => {
         record.once('live.create', () => {
           t.pass('live.create triggered on new field creation.')
-          record.fetch(() => {
+          record.proxy.fetch(() => {
             t.ok(record.hasOwnProperty('middlename') && record.middlename === 'Alonsi', 'Field creation persisted on the fly.')
             next()
           })
@@ -295,7 +298,7 @@ test('Live Sync Model', function (t) {
           t.pass('live.delete triggered on new field creation.')
           t.ok(!record.hasOwnProperty('middlename'), 'Field deletion persisted on the fly.')
 
-          record.op((db, done) => {
+          record.proxy.op((db, done) => {
             db.get('middlename', (err, value) => {
               done()
 
@@ -315,7 +318,7 @@ test('Live Sync Model', function (t) {
 
           record.vehicle.setSilent('type', 'other')
 
-          record.fetch(() => {
+          record.proxy.fetch(() => {
             t.ok(record.vehicle.type === 'Tardis', 'Proper value persisted in nested model.')
             next()
           })
@@ -358,13 +361,13 @@ test('Live Sync Store', function (t) {
     proxy: new NGNX.DATA.LevelDBProxy(root)
   })
 
-  People.enableLiveSync()
+  People.proxy.enableLiveSync()
 
   let tasks = new TaskRunner()
 
   tasks.add((next) => {
     People.once('live.create', (record) => {
-      People.op((db, done) => {
+      People.proxy.op((db, done) => {
         db.get(record.id, {
           valueEncoding: 'json'
         }, (err, v) => {
@@ -391,7 +394,7 @@ test('Live Sync Store', function (t) {
 
   tasks.add((next) => {
     People.once('live.create', (record) => {
-      People.op((db, done) => {
+      People.proxy.op((db, done) => {
         db.get(record.id, {
           valueEncoding: 'json'
         }, (err, v) => {
@@ -418,7 +421,7 @@ test('Live Sync Store', function (t) {
 
   tasks.add((next) => {
     People.once('live.update', (record) => {
-      People.op((db, done) => {
+      People.proxy.op((db, done) => {
         db.get(record.id, {
           valueEncoding: 'json'
         }, (err, v) => {
@@ -442,7 +445,7 @@ test('Live Sync Store', function (t) {
 
   tasks.add((next) => {
     People.once('live.delete', (record) => {
-      People.op((db, done) => {
+      People.proxy.op((db, done) => {
         db.get(record.id, (err) => {
           done()
 
@@ -465,7 +468,7 @@ test('Live Sync Store', function (t) {
     let id = People.first.id
 
     People.on('live.delete', () => {
-      People.op((db, done) => {
+      People.proxy.op((db, done) => {
         db.get(id, (err) => {
           done()
 

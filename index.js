@@ -56,28 +56,9 @@ class LevelDbProxy extends NGN.DATA.Proxy {
     })
   }
 
-  init (datastore) {
-    super.init(datastore)
-    NGN.inherit(this, datastore)
-  }
-
-  mkdirp (dir) {
-    if (NGN.util.pathReadable(dir)) {
-      return
-    }
-
-    if (NGN.util.pathReadable(require('path').join(dir, '..'))) {
-      require('fs').mkdirSync(dir)
-      return
-    }
-
-    this.mkdirp(require('path').join(dir, '..'))
-    this.mkdirp(dir)
-  }
-
   op (fn) {
     // console.log('Opening LevelDB')
-    let db = this.proxy.leveldb(this.proxy.directory)
+    let db = this.leveldb(this.directory)
     fn(db, function () {
       // console.log('Closing LevelDB')
       db.close()
@@ -129,17 +110,17 @@ class LevelDbProxy extends NGN.DATA.Proxy {
   save (callback) {
     require('leveldown').destroy(this.directory, () => {
       this.op((db, done) => {
-        db.batch(this.format(this.data), () => {
+        db.batch(this.format(this.store.data), () => {
           done()
           setTimeout(() => {
             this.emit('save')
-            callback && callback()
+            this.store.emit('save')
+            if (NGN.isFn(callback)) {
+              callback()
+            }
           }, 10)
         })
       })
-      // if (this.type === 'store') {
-      //   // TODO: Remove records that were deleted since the initial load.
-      // }
     })
   }
 
@@ -164,11 +145,13 @@ class LevelDbProxy extends NGN.DATA.Proxy {
           dataset.push(data)
         })
         .on('error', (err) => {
+          console.log(err)
           done()
           throw err
         })
         .on('end', () => {
-          this.reload(dataset)
+          console.log(dataset)
+          this.store.reload(dataset)
           done()
           setTimeout(callback, 10)
         })
@@ -176,7 +159,9 @@ class LevelDbProxy extends NGN.DATA.Proxy {
     } else {
       this.op((db, fetchcomplete) => {
         let keys = []
+        console.log('??????')
         db.createKeyStream().on('data', (key) => {
+          console.log('>>>>>>', key)
           if (this.hasOwnProperty(key)) {
             keys.push(key)
           }
@@ -245,7 +230,7 @@ class LevelDbProxy extends NGN.DATA.Proxy {
             keys = null
 
             if (Object.keys(data).length > 0) {
-              this.load(data)
+              this.store.load(data)
             }
 
             setTimeout(callback, 20)
@@ -347,6 +332,7 @@ class LevelDbProxy extends NGN.DATA.Proxy {
             done()
             setTimeout(() => {
               this.emit('live.create', change)
+              this.store.emit('live.create', change)
             }, 10)
           })
         })
@@ -382,6 +368,7 @@ class LevelDbProxy extends NGN.DATA.Proxy {
             done()
             setTimeout(() => {
               this.emit('live.update', change)
+              this.store.emit('live.update', change)
             }, 10)
           })
         })
@@ -401,6 +388,7 @@ class LevelDbProxy extends NGN.DATA.Proxy {
             done()
             setTimeout(() => {
               this.emit('live.delete', change)
+              this.store.emit('live.delete', change)
             }, 10)
           })
         })
@@ -419,6 +407,7 @@ class LevelDbProxy extends NGN.DATA.Proxy {
             done()
             setTimeout(() => {
               this.emit('live.delete', change)
+              this.store.emit('live.delete', change)
             }, 10)
           })
         })
@@ -442,6 +431,7 @@ class LevelDbProxy extends NGN.DATA.Proxy {
             done()
             setTimeout(() => {
               this.emit('live.create', record)
+              this.store.emit('live.create', record)
             }, 10)
           })
         })
@@ -461,6 +451,7 @@ class LevelDbProxy extends NGN.DATA.Proxy {
             done()
             setTimeout(() => {
               this.emit('live.update', record)
+              this.store.emit('live.update', record)
             }, 10)
           })
         })
@@ -478,8 +469,10 @@ class LevelDbProxy extends NGN.DATA.Proxy {
             }
 
             done() // eslint-disable-line
+
             setTimeout(() => {
               this.emit('live.delete', record)
+              this.store.emit('live.delete', record)
             }, 10)
           })
         })
@@ -488,6 +481,7 @@ class LevelDbProxy extends NGN.DATA.Proxy {
       this.on('clear', () => {
         require('leveldown').destroy(this.directory, () => {
           this.emit('live.delete', null)
+          this.store.emit('live.delete', null)
         })
       })
     }
